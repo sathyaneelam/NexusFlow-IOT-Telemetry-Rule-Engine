@@ -1,23 +1,24 @@
-﻿"""Initial rule definitions for monitoring IoT telemetry."""
+"""Rules for evaluating incoming IoT telemetry readings."""
 
+from collections.abc import Mapping
 from copy import deepcopy
+from math import isfinite
+
+from .thresholds import (
+    SENSOR_THRESHOLDS,
+    get_threshold,
+    get_thresholds,
+    set_threshold,
+)
 
 
-# Thresholds are centralized here so they can be changed without modifying
-# the functions that evaluate telemetry values.
+NORMAL = "NORMAL"
+ABNORMAL = "ABNORMAL"
+
+# Numeric rule entries reuse the threshold configuration instead of copying it.
 RULE_DEFINITIONS = {
-    "temperature": {
-        "min": 0.0,
-        "max": 50.0,
-        "unit": "C",
-        "condition": "normal when 0.0 <= temperature <= 50.0",
-    },
-    "humidity": {
-        "min": 30.0,
-        "max": 70.0,
-        "unit": "%",
-        "condition": "normal when 30.0 <= humidity <= 70.0",
-    },
+    "temperature": SENSOR_THRESHOLDS["temperature"],
+    "humidity": SENSOR_THRESHOLDS["humidity"],
     "device_status": {
         "normal_values": ("online", "active", "connected"),
         "abnormal_values": ("offline", "error", "maintenance"),
@@ -43,24 +44,46 @@ def get_rule(parameter):
     name = parameter.lower()
     if name not in RULE_DEFINITIONS:
         raise KeyError("Unknown rule parameter: {}".format(parameter))
+    if name in SENSOR_THRESHOLDS:
+        return get_threshold(name)
     return deepcopy(RULE_DEFINITIONS[name])
 
 
-def check_rule(parameter, value):
-    """Check whether a telemetry value satisfies its rule.
+def evaluate_reading(parameter, value):
+    """Evaluate one reading and return its status, value, and explanation.
 
-    Returns True for normal values and False for abnormal values.
+    A missing value or an invalid value is ABNORMAL and includes a reason.
     """
     rule = get_rule(parameter)
+    name = parameter.lower()
 
-    if parameter.lower() == "device_status":
+    if value is None:
+        return {"status": ABNORMAL, "value": value, "reason": "missing value"}
+
+    if name == "device_status":
         if not isinstance(value, str):
-            return False
-        return value.strip().lower() in rule["normal_values"]
+            return {"status": ABNORMAL, "value": value, "reason": "invalid value"}
+
+        normalized_value = value.strip().lower()
+        if normalized_value in rule["normal_values"]:
+            return {"status": NORMAL, "value": value, "reason": "recognized normal status"}
+        if normalized_value in rule["abnormal_values"]:
+            return {"status": ABNORMAL, "value": value, "reason": "recognized abnormal status"}
+        return {"status": ABNORMAL, "value": value, "reason": "invalid device status"}
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    return rule["min"] <= value <= rule["max"]
+        return {"status": ABNORMAL, "value": value, "reason": "invalid numeric value"}
+    if isinstance(value, float) and not isfinite(value):
+        return {"status": ABNORMAL, "value": value, "reason": "invalid numeric value"}
+
+    if rule["min"] <= value <= rule["max"]:
+        return {"status": NORMAL, "value": value, "reason": "within configured threshold"}
+    return {"status": ABNORMAL, "value": value, "reason": "outside configured threshold"}
+
+
+def check_rule(parameter, value):
+    """Return True when a reading is NORMAL, preserving the original API."""
+    return evaluate_reading(parameter, value)["status"] == NORMAL
 
 
 def evaluate_telemetry(telemetry):
@@ -68,52 +91,38 @@ def evaluate_telemetry(telemetry):
 
     The input is expected to be a mapping such as
     ``{"temperature": 24.5, "humidity": 55, "device_status": "online"}``.
+    A supported key with a None value is reported as missing and ABNORMAL.
     """
-    if not hasattr(telemetry, "items"):
+    if not isinstance(telemetry, Mapping):
         raise TypeError("telemetry must be a mapping")
 
     results = {}
     for parameter, value in telemetry.items():
         if isinstance(parameter, str) and parameter.lower() in RULE_DEFINITIONS:
             name = parameter.lower()
-            results[name] = {
-                "value": value,
-                "normal": check_rule(name, value),
-            }
+            result = evaluate_reading(name, value)
+            results[name] = dict(result, normal=result["status"] == NORMAL)
     return results
 
 
 def update_numeric_threshold(parameter, minimum=None, maximum=None):
     """Update the lower and/or upper threshold for a numeric sensor rule."""
     rule = get_rule(parameter)
-    name = parameter.lower()
-
     if "min" not in rule or "max" not in rule:
         raise ValueError("{} is not a numeric rule".format(parameter))
-
-    new_min = rule["min"] if minimum is None else minimum
-    new_max = rule["max"] if maximum is None else maximum
-
-    if isinstance(new_min, bool) or not isinstance(new_min, (int, float)):
-        raise TypeError("minimum must be a number")
-    if isinstance(new_max, bool) or not isinstance(new_max, (int, float)):
-        raise TypeError("maximum must be a number")
-    if new_min > new_max:
-        raise ValueError("minimum threshold cannot exceed maximum threshold")
-
-    RULE_DEFINITIONS[name]["min"] = float(new_min)
-    RULE_DEFINITIONS[name]["max"] = float(new_max)
-    RULE_DEFINITIONS[name]["condition"] = (
-        "normal when {} <= {} <= {}".format(new_min, name, new_max)
-    )
-    return get_rule(name)
+    return set_threshold(parameter, minimum, maximum)
 
 
 __all__ = [
     "RULE_DEFINITIONS",
+    "NORMAL",
+    "ABNORMAL",
     "get_rules",
     "get_rule",
+    "get_threshold",
+    "get_thresholds",
     "check_rule",
+    "evaluate_reading",
     "evaluate_telemetry",
     "update_numeric_threshold",
 ]

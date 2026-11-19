@@ -1,39 +1,51 @@
 ﻿# Rule Engine & Alerts
 
-This module provides the initial Day 1 setup for the NexusFlow IoT Telemetry Rule Engine. It defines reusable rules for normal and abnormal telemetry values and does not depend on or modify the rest of the project.
+This module provides configurable IoT monitoring thresholds and reusable rules for classifying sensor readings as `NORMAL` or `ABNORMAL`. It does not send notifications or integrate with external alert services.
 
 ## Files
 
 - `__init__.py` exports the public rule-engine API so callers can use `from rule_engine import ...`.
-- `rules.py` contains the sensor rule definitions, threshold configuration, and reusable functions for reading and evaluating rules.
+- `thresholds.py` stores sensor thresholds and provides functions to retrieve or update them.
+- `rules.py` validates readings using the configured thresholds and reports their status.
+- `test_rules.py` contains unit tests for normal, abnormal, missing, and invalid readings.
 - `README.md` describes the module purpose and usage.
 
 ## Monitored Parameters
 
-The initial definitions cover:
+The configurable demo defaults match the values documented for this project:
 
 - `temperature`: normal range from 0.0 to 50.0 C.
 - `humidity`: normal range from 30.0 to 70.0 percent.
 - `device_status`: normal values are `online`, `active`, or `connected`; common abnormal values are `offline`, `error`, or `maintenance`.
 
-Threshold values are centralized in `RULE_DEFINITIONS` and can also be changed for numeric parameters with `update_numeric_threshold()`.
+Temperature and humidity thresholds are maintained separately from the rule evaluation code in `thresholds.py`. `get_threshold(sensor)` returns one threshold configuration and `get_thresholds()` returns all configurations. Both return copies, so callers cannot accidentally change the active settings. Use `set_threshold()` or the existing `update_numeric_threshold()` helper to adjust values.
 
 ## Working Overview
 
-1. `get_rules()` returns all rule definitions.
-2. `get_rule(parameter)` returns one parameter rule.
-3. `check_rule(parameter, value)` checks whether one telemetry value is normal.
-4. `evaluate_telemetry(telemetry)` evaluates a mapping of supported telemetry values and returns a normal/abnormal result for each known parameter.
+1. `get_threshold(sensor)` and `get_thresholds()` retrieve the configured limits and units.
+2. `evaluate_reading(sensor, value)` returns `NORMAL` or `ABNORMAL`, along with the reading and a reason. `None`, non-numeric values, booleans, and non-finite numbers are safely marked `ABNORMAL`.
+3. `evaluate_telemetry(telemetry)` applies the rules to supported values in a mapping. A supported key whose value is `None` is reported as missing.
+4. `check_rule(parameter, value)` remains available for callers that need the original boolean result (`True` for normal).
 
 Example:
 
 ```python
-from rule_engine import check_rule, evaluate_telemetry
+from rule_engine import evaluate_reading, evaluate_telemetry, set_threshold
 
-print(check_rule("temperature", 24.5))
+set_threshold("temperature", minimum=5, maximum=40)
+
+print(evaluate_reading("temperature", 24.5))
+# {'status': 'NORMAL', 'value': 24.5, 'reason': 'within configured threshold'}
+
 print(evaluate_telemetry({
     "temperature": 24.5,
     "humidity": 55,
     "device_status": "online",
 }))
+```
+
+Run the unit tests from the project root with:
+
+```shell
+python -m unittest rule_engine.test_rules
 ```
