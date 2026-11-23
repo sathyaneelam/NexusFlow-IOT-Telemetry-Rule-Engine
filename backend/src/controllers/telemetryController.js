@@ -18,6 +18,80 @@ const ingestReading = async (req, res, next) => {
   }
 };
 
+/**
+ * Controller to handle bulk telemetry ingestion.
+ * POST /api/telemetry/bulk
+ */
+const ingestBulk = async (req, res, next) => {
+  try {
+    const readings = req.readings || req.body.readings || req.body;
+    const result = await telemetryService.createBulkTelemetry(readings);
+
+    return res.status(201).json({
+      success: true,
+      message: "Bulk telemetry ingested successfully",
+      count: result.count,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller to retrieve paginated telemetry readings.
+ * GET /api/telemetry
+ */
+const getAllTelemetry = async (req, res, next) => {
+  try {
+    const { deviceId, sensorId, startDate, endDate, page, limit } = req.query;
+    const result = await telemetryService.getTelemetry({
+      deviceId,
+      sensorId,
+      startDate,
+      endDate,
+      page,
+      limit,
+    });
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller to retrieve telemetry by sensorId.
+ * GET /api/telemetry/:sensorId
+ */
+const getBySensorId = async (req, res, next) => {
+  try {
+    const { sensorId } = req.params;
+    const { deviceId, startDate, endDate, page, limit } = req.query;
+
+    const result = await telemetryService.getTelemetryBySensorId(sensorId, {
+      deviceId,
+      startDate,
+      endDate,
+      page,
+      limit,
+    });
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   ingestReading,
+  ingestBulk,
+  getAllTelemetry,
+  getBySensorId,
 };

@@ -63,5 +63,58 @@ const validateTelemetry = (req, res, next) => {
   next();
 };
 
+/**
+ * Express middleware for validating bulk telemetry ingestion requests.
+ * Accepts either { readings: [...] } or direct [...] array.
+ */
+const validateBulkTelemetry = (req, res, next) => {
+  const rawList = Array.isArray(req.body)
+    ? req.body
+    : req.body && Array.isArray(req.body.readings)
+    ? req.body.readings
+    : null;
+
+  if (!rawList) {
+    return res.status(400).json({
+      success: false,
+      error: "ValidationError",
+      message: "Bulk payload must be an array of readings or an object with a 'readings' array",
+    });
+  }
+
+  if (rawList.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "ValidationError",
+      message: "Bulk telemetry array cannot be empty",
+    });
+  }
+
+  if (rawList.length > 5000) {
+    return res.status(400).json({
+      success: false,
+      error: "ValidationError",
+      message: "Batch size exceeds maximum limit of 5,000 readings per request",
+    });
+  }
+
+  // Validate each reading in batch
+  for (let i = 0; i < rawList.length; i++) {
+    const check = validateSingleReading(rawList[i]);
+    if (!check.valid) {
+      return res.status(400).json({
+        success: false,
+        error: "ValidationError",
+        message: `Invalid reading at index [${i}]: ${check.message}`,
+        index: i,
+      });
+    }
+  }
+
+  req.readings = rawList;
+  next();
+};
+
 module.exports = validateTelemetry;
 module.exports.validateSingleReading = validateSingleReading;
+module.exports.validateBulkTelemetry = validateBulkTelemetry;
