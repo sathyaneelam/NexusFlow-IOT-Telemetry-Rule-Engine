@@ -12,24 +12,24 @@ describe("Bulk Telemetry Ingestion & Retrieval APIs", () => {
   let originalCountDocuments;
 
   const mockDbDocs = [
-    new Telemetry({
+    {
       _id: new mongoose.Types.ObjectId(),
       timestamp: new Date("2026-11-23T10:00:00.000Z"),
       metadata: { deviceId: "device-001", sensorId: "temp-001" },
       measurements: { temperature: 24.5, humidity: 60.1 },
-    }),
-    new Telemetry({
+    },
+    {
       _id: new mongoose.Types.ObjectId(),
       timestamp: new Date("2026-11-23T10:05:00.000Z"),
       metadata: { deviceId: "device-001", sensorId: "press-001" },
       measurements: { pressure: 1013.2 },
-    }),
-    new Telemetry({
+    },
+    {
       _id: new mongoose.Types.ObjectId(),
       timestamp: new Date("2026-11-23T10:10:00.000Z"),
       metadata: { deviceId: "device-002", sensorId: "temp-002" },
       measurements: { temperature: 30.1 },
-    }),
+    },
   ];
 
   before((_, done) => {
@@ -49,22 +49,26 @@ describe("Bulk Telemetry Ingestion & Retrieval APIs", () => {
       return mockDbDocs.length;
     };
 
-    // Stub find with chainable sort, skip, limit
+    // Stub find with chainable sort, skip, limit, lean
     originalFind = Telemetry.find;
     Telemetry.find = function (query) {
+      let filtered = [...mockDbDocs];
+      if (query && query["metadata.sensorId"]) {
+        filtered = filtered.filter((d) => d.metadata.sensorId === query["metadata.sensorId"]);
+      }
+      if (query && query["metadata.deviceId"]) {
+        filtered = filtered.filter((d) => d.metadata.deviceId === query["metadata.deviceId"]);
+      }
+
       const chain = {
         sort: () => chain,
         skip: () => chain,
         limit: (l) => {
-          let results = mockDbDocs;
-          if (query && query["metadata.sensorId"]) {
-            results = results.filter((d) => d.metadata.sensorId === query["metadata.sensorId"]);
-          }
-          if (query && query["metadata.deviceId"]) {
-            results = results.filter((d) => d.metadata.deviceId === query["metadata.deviceId"]);
-          }
-          return Promise.resolve(results.slice(0, l));
+          filtered = filtered.slice(0, l);
+          return chain;
         },
+        lean: () => Promise.resolve(filtered),
+        then: (resolve, reject) => Promise.resolve(filtered).then(resolve, reject),
       };
       return chain;
     };

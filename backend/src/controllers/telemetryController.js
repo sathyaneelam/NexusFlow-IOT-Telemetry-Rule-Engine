@@ -40,11 +40,28 @@ const ingestBulk = async (req, res, next) => {
 
 /**
  * Controller to retrieve paginated telemetry readings.
+ * Supports filters: deviceId, sensorId, startDate, endDate, sort, cursor, and metric thresholds.
  * GET /api/telemetry
  */
 const getAllTelemetry = async (req, res, next) => {
   try {
-    const { deviceId, sensorId, startDate, endDate, page, limit } = req.query;
+    const {
+      deviceId,
+      sensorId,
+      startDate,
+      endDate,
+      page,
+      limit,
+      sort,
+      cursor,
+      minTemperature,
+      maxTemperature,
+      minHumidity,
+      maxHumidity,
+      minPressure,
+      maxPressure,
+    } = req.query;
+
     const result = await telemetryService.getTelemetry({
       deviceId,
       sensorId,
@@ -52,6 +69,14 @@ const getAllTelemetry = async (req, res, next) => {
       endDate,
       page,
       limit,
+      sort,
+      cursor,
+      minTemperature,
+      maxTemperature,
+      minHumidity,
+      maxHumidity,
+      minPressure,
+      maxPressure,
     });
 
     return res.status(200).json({
@@ -70,7 +95,21 @@ const getAllTelemetry = async (req, res, next) => {
 const getBySensorId = async (req, res, next) => {
   try {
     const { sensorId } = req.params;
-    const { deviceId, startDate, endDate, page, limit } = req.query;
+    const {
+      deviceId,
+      startDate,
+      endDate,
+      page,
+      limit,
+      sort,
+      cursor,
+      minTemperature,
+      maxTemperature,
+      minHumidity,
+      maxHumidity,
+      minPressure,
+      maxPressure,
+    } = req.query;
 
     const result = await telemetryService.getTelemetryBySensorId(sensorId, {
       deviceId,
@@ -78,6 +117,14 @@ const getBySensorId = async (req, res, next) => {
       endDate,
       page,
       limit,
+      sort,
+      cursor,
+      minTemperature,
+      maxTemperature,
+      minHumidity,
+      maxHumidity,
+      minPressure,
+      maxPressure,
     });
 
     return res.status(200).json({
