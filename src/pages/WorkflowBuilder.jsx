@@ -103,6 +103,27 @@ useEffect(() => {
   localStorage.setItem("nexusflow-workflow-edges", JSON.stringify(edges));
 }, [edges]);
   const [workflowName, setWorkflowName] = useState("New Automation");
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+
+
+
+
+  const selectedNode = nodes.find(
+    (node) => node.id === selectedNodeId
+  );
+
+  const updateNodeField = (field, value) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.id === selectedNodeId
+          ? {
+              ...node,
+              data: { ...node.data, [field]: value },
+            }
+          : node
+      )
+    );
+  };
 
   const onConnect = useCallback(
     (connection) => {
@@ -228,6 +249,8 @@ useEffect(() => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+            onPaneClick={() => setSelectedNodeId(null)}
             fitView
             fitViewOptions={{ padding: 0.25 }}
           >
@@ -240,6 +263,49 @@ useEffect(() => {
             />
           </ReactFlow>
         </div>
+
+        {selectedNode && (
+          <aside className="node-config-panel">
+            <div className="config-heading">
+              <h3>Configure {selectedNode.type}</h3>
+              <button onClick={() => setSelectedNodeId(null)}>×</button>
+            </div>
+
+            <div className="config-fields">
+              <label>Node Name</label>
+              <input
+                value={selectedNode.data.label || ""}
+                onChange={(event) =>
+                  updateNodeField("label", event.target.value)
+                }
+              />
+
+              {selectedNode.type === "sensor" && (
+                <>
+                  <label>Device ID</label>
+                  <input
+                    value={selectedNode.data.device || ""}
+                    onChange={(event) =>
+                      updateNodeField("device", event.target.value)
+                    }
+                  />
+                </>
+              )}
+
+              {selectedNode.type === "condition" && (
+                <>
+                  <label>Condition Rule</label>
+                  <input
+                    value={selectedNode.data.rule || ""}
+                    onChange={(event) =>
+                      updateNodeField("rule", event.target.value)
+                    }
+                  />
+                </>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
