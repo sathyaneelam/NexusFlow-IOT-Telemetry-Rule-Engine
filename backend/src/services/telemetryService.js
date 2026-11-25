@@ -182,6 +182,103 @@ const getTelemetry = async (options = {}) => {
 };
 
 /**
+ * Retrieves the single most recent telemetry reading for a given sensorId.
+ * Highly optimized using the compound index { "metadata.sensorId": 1, timestamp: -1 }.
+ *
+ * @param {string} sensorId
+ * @param {object} [options]
+ * @param {string} [options.deviceId]
+ * @returns {Promise<object|null>}
+ */
+const getLatestTelemetry = async (sensorId, options = {}) => {
+  if (!sensorId) {
+    throw new Error("Sensor ID is required");
+  }
+
+  const query = {
+    "metadata.sensorId": String(sensorId).trim(),
+  };
+
+  if (options.deviceId) {
+    query["metadata.deviceId"] = String(options.deviceId).trim();
+  }
+
+  let findOneQuery;
+  if (typeof Telemetry.findOne === "function") {
+    findOneQuery = Telemetry.findOne(query).sort({ timestamp: -1 });
+  } else {
+    // Fallback for custom stub in tests if findOne isn't mocked
+    const findQ = Telemetry.find(query).sort({ timestamp: -1 }).limit(1);
+    const docs = typeof findQ.lean === "function" ? await findQ.lean() : await findQ;
+    return docs && docs.length > 0 ? formatTelemetryDoc(docs[0]) : null;
+  }
+
+  const doc = typeof findOneQuery.lean === "function" ? await findOneQuery.lean() : await findOneQuery;
+
+  return doc ? formatTelemetryDoc(doc) : null;
+};
+
+/**
+ * Retrieves historical telemetry for charting and time-series reports.
+ * Defaults to chronological ascending order (oldest to newest) for chart plotting.
+ *
+ * @param {string} sensorId
+ * @param {object} [options]
+ * @param {string} [options.deviceId]
+ * @param {string|Date} [options.startDate]
+ * @param {string|Date} [options.endDate]
+ * @param {number} [options.limit=100]
+ * @param {string} [options.sort='asc']
+ * @returns {Promise<object>}
+ */
+const getHistoricalTelemetry = async (sensorId, options = {}) => {
+  if (!sensorId) {
+    throw new Error("Sensor ID is required");
+  }
+
+  const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 100));
+  const sortOrder = String(options.sort || "asc").toLowerCase() === "desc" ? -1 : 1;
+
+  const query = {
+    "metadata.sensorId": String(sensorId).trim(),
+  };
+
+  if (options.deviceId) {
+    query["metadata.deviceId"] = String(options.deviceId).trim();
+  }
+
+  if (options.startDate || options.endDate) {
+    query.timestamp = {};
+    if (options.startDate) {
+      const s = new Date(options.startDate);
+      if (!isNaN(s.getTime())) query.timestamp.$gte = s;
+    }
+    if (options.endDate) {
+      const e = new Date(options.endDate);
+      if (!isNaN(e.getTime())) query.timestamp.$lte = e;
+    }
+  }
+
+  const findQuery = Telemetry.find(query).sort({ timestamp: sortOrder }).limit(limit);
+  const rawDocs = typeof findQuery.lean === "function" ? await findQuery.lean() : await findQuery;
+
+  const formattedData = rawDocs.map(formatTelemetryDoc);
+
+  return {
+    sensorId,
+    query: {
+      deviceId: options.deviceId || null,
+      startDate: options.startDate || null,
+      endDate: options.endDate || null,
+      limit,
+      sort: sortOrder === 1 ? "asc" : "desc",
+      count: formattedData.length,
+    },
+    data: formattedData,
+  };
+};
+
+/**
  * Retrieves telemetry for a specific sensorId with optional date/metric filtering and pagination.
  *
  * @param {string} sensorId
@@ -197,5 +294,7 @@ module.exports = {
   createBulkTelemetry,
   getTelemetry,
   getTelemetryBySensorId,
+  getLatestTelemetry,
+  getHistoricalTelemetry,
   formatTelemetryDoc,
 };

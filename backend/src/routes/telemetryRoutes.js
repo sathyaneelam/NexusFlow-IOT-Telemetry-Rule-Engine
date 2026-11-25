@@ -13,6 +13,12 @@ router.post("/", validateTelemetry, telemetryController.ingestReading);
 // GET /api/telemetry - Retrieve telemetry readings with filtering & pagination
 router.get("/", telemetryController.getAllTelemetry);
 
+// GET /api/telemetry/:sensorId/latest - Retrieve the latest reading for a sensor
+router.get("/:sensorId/latest", telemetryController.getLatest);
+
+// GET /api/telemetry/:sensorId/history - Retrieve historical readings for a sensor
+router.get("/:sensorId/history", telemetryController.getHistory);
+
 // GET /api/telemetry/:sensorId - Retrieve telemetry for a specific sensor
 router.get("/:sensorId", telemetryController.getBySensorId);
 

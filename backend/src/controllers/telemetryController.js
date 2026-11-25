@@ -89,6 +89,60 @@ const getAllTelemetry = async (req, res, next) => {
 };
 
 /**
+ * Controller to retrieve the latest telemetry reading for a given sensorId.
+ * GET /api/telemetry/:sensorId/latest
+ */
+const getLatest = async (req, res, next) => {
+  try {
+    const { sensorId } = req.params;
+    const { deviceId } = req.query;
+
+    const latest = await telemetryService.getLatestTelemetry(sensorId, { deviceId });
+
+    if (!latest) {
+      return res.status(404).json({
+        success: false,
+        error: "NotFoundError",
+        message: `No telemetry readings found for sensor '${sensorId}'`,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: latest,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller to retrieve historical telemetry for charting and time-series reports.
+ * GET /api/telemetry/:sensorId/history
+ */
+const getHistory = async (req, res, next) => {
+  try {
+    const { sensorId } = req.params;
+    const { deviceId, startDate, endDate, limit, sort } = req.query;
+
+    const result = await telemetryService.getHistoricalTelemetry(sensorId, {
+      deviceId,
+      startDate,
+      endDate,
+      limit,
+      sort,
+    });
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Controller to retrieve telemetry by sensorId.
  * GET /api/telemetry/:sensorId
  */
@@ -141,4 +195,6 @@ module.exports = {
   ingestBulk,
   getAllTelemetry,
   getBySensorId,
+  getLatest,
+  getHistory,
 };
