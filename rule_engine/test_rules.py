@@ -61,10 +61,24 @@ class MonitoringRuleTests(unittest.TestCase):
             evaluate_telemetry({"humidity": None})["humidity"]["status"], ABNORMAL
         )
 
-    def test_invalid_and_non_numeric_readings_are_abnormal(self):
-        for value in ("warm", True, float("nan"), float("inf")):
+    def test_empty_string_readings_are_abnormal(self):
+        for value in ("", "   ", "\t\n"):
+            with self.subTest(value=value):
+                result = evaluate_reading("humidity", value)
+                self.assertEqual(result["status"], ABNORMAL)
+                self.assertEqual(result["reason"], "missing value: empty string")
+
+    def test_invalid_data_types_are_abnormal(self):
+        for value in ("warm", True, False, [], {}, (), complex(20, 1)):
             with self.subTest(value=value):
                 result = evaluate_reading("temperature", value)
+                self.assertEqual(result["status"], ABNORMAL)
+                self.assertEqual(result["reason"], "invalid numeric value")
+
+    def test_nan_and_infinity_readings_are_abnormal(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                result = evaluate_reading("humidity", value)
                 self.assertEqual(result["status"], ABNORMAL)
                 self.assertEqual(result["reason"], "invalid numeric value")
 
@@ -82,6 +96,21 @@ class MonitoringRuleTests(unittest.TestCase):
         self.assertEqual(result["temperature"]["status"], NORMAL)
         self.assertTrue(result["temperature"]["normal"])
         self.assertEqual(result["temperature"]["value"], 20)
+
+    def test_telemetry_validation_returns_one_clear_result_per_supported_sensor(self):
+        result = evaluate_telemetry({
+            "temperature": "",
+            "humidity": float("nan"),
+            "unsupported_sensor": 100,
+        })
+
+        self.assertEqual(set(result), {"temperature", "humidity"})
+        self.assertEqual(
+            result["temperature"]["reason"], "missing value: empty string"
+        )
+        self.assertEqual(
+            result["humidity"]["reason"], "invalid numeric value"
+        )
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ Temperature and humidity thresholds are maintained separately from the rule eval
 ## Working Overview
 
 1. `get_threshold(sensor)` and `get_thresholds()` retrieve the configured limits and units.
-2. `evaluate_reading(sensor, value)` returns `NORMAL` or `ABNORMAL`, along with the reading and a reason. `None`, non-numeric values, booleans, and non-finite numbers are safely marked `ABNORMAL`.
+2. `evaluate_reading(sensor, value)` returns `NORMAL` or `ABNORMAL`, along with the original reading and a reason. `None` is reported as missing, whitespace-only or empty strings as missing empty values, booleans and incorrect types as invalid numeric values, and `NaN` or infinity as invalid numeric values.
 3. `evaluate_telemetry(telemetry)` applies the rules to supported values in a mapping. A supported key whose value is `None` is reported as missing.
 4. `check_rule(parameter, value)` remains available for callers that need the original boolean result (`True` for normal).
 
@@ -42,6 +42,21 @@ print(evaluate_telemetry({
     "humidity": 55,
     "device_status": "online",
 }))
+
+print(evaluate_reading("temperature", None))
+# {'status': 'ABNORMAL', 'value': None, 'reason': 'missing value'}
+
+print(evaluate_reading("humidity", "  "))
+# {'status': 'ABNORMAL', 'value': '  ', 'reason': 'missing value: empty string'}
+
+print(evaluate_reading("temperature", True))
+# {'status': 'ABNORMAL', 'value': True, 'reason': 'invalid numeric value'}
+
+print(evaluate_reading("humidity", float("nan")))
+# {'status': 'ABNORMAL', 'value': nan, 'reason': 'invalid numeric value'}
+
+print(evaluate_reading("temperature", 100))
+# {'status': 'ABNORMAL', 'value': 100, 'reason': 'outside configured threshold'}
 ```
 
 Run the unit tests from the project root with:

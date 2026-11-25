@@ -60,6 +60,9 @@ def evaluate_reading(parameter, value):
     if value is None:
         return {"status": ABNORMAL, "value": value, "reason": "missing value"}
 
+    if isinstance(value, str) and not value.strip():
+        return {"status": ABNORMAL, "value": value, "reason": "missing value: empty string"}
+
     if name == "device_status":
         if not isinstance(value, str):
             return {"status": ABNORMAL, "value": value, "reason": "invalid value"}
