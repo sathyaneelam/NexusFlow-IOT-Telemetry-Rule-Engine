@@ -1,4 +1,5 @@
 const Telemetry = require("../models/Telemetry");
+const { chunkArray, startTimer } = require("../utils/batchProcessor");
 
 /**
  * Lightweight document formatter for .lean() query results.
@@ -46,25 +47,56 @@ const createTelemetry = async (payload) => {
 };
 
 /**
- * Ingests multiple telemetry readings in bulk using optimized batch write.
+ * Ingests multiple telemetry readings in bulk using optimized chunked batch writes.
+ * Supports heterogeneous sensor and device streams with microsecond precision timers.
  *
  * @param {Array<object>} readings - Array of telemetry readings
- * @returns {Promise<{ count: number, data: Array<object> }>}
+ * @param {object} [options]
+ * @param {number} [options.chunkSize=1000] - Sub-batch chunk size
+ * @returns {Promise<{ count: number, summary: object, data: Array<object> }>}
  */
-const createBulkTelemetry = async (readings) => {
+const createBulkTelemetry = async (readings, options = {}) => {
   if (!Array.isArray(readings) || readings.length === 0) {
     throw new Error("Readings must be a non-empty array");
   }
 
+  const getDuration = startTimer();
+  const chunkSize = options.chunkSize || 1000;
   const formattedDocs = readings.map((r) => Telemetry.formatIncomingPayload(r));
+  const chunks = chunkArray(formattedDocs, chunkSize);
 
-  // High-performance batch insertion into time-series collection
-  // ordered: false allows parallel insertion without halting on individual errors
-  const insertedDocs = await Telemetry.insertMany(formattedDocs, { ordered: false });
+  const insertedDocs = [];
+  let writeErrors = 0;
+
+  for (const chunk of chunks) {
+    try {
+      const result = await Telemetry.insertMany(chunk, { ordered: false });
+      insertedDocs.push(...result);
+    } catch (err) {
+      if (err.insertedDocs && Array.isArray(err.insertedDocs)) {
+        insertedDocs.push(...err.insertedDocs);
+        writeErrors += chunk.length - err.insertedDocs.length;
+      } else {
+        writeErrors += chunk.length;
+      }
+    }
+  }
+
+  const durationMs = parseFloat(getDuration().toFixed(2));
 
   return {
     count: insertedDocs.length,
-    data: insertedDocs.map((doc) => doc.toJSON()),
+    summary: {
+      total: readings.length,
+      inserted: insertedDocs.length,
+      failed: writeErrors,
+      durationMs,
+      throughputPerSec:
+        durationMs > 0 ? Math.round((insertedDocs.length / durationMs) * 1000) : 0,
+    },
+    data: insertedDocs.map((doc) =>
+      typeof doc.toJSON === "function" ? doc.toJSON() : formatTelemetryDoc(doc)
+    ),
   };
 };
 
@@ -207,13 +239,15 @@ const getLatestTelemetry = async (sensorId, options = {}) => {
   if (typeof Telemetry.findOne === "function") {
     findOneQuery = Telemetry.findOne(query).sort({ timestamp: -1 });
   } else {
-    // Fallback for custom stub in tests if findOne isn't mocked
     const findQ = Telemetry.find(query).sort({ timestamp: -1 }).limit(1);
     const docs = typeof findQ.lean === "function" ? await findQ.lean() : await findQ;
     return docs && docs.length > 0 ? formatTelemetryDoc(docs[0]) : null;
   }
 
-  const doc = typeof findOneQuery.lean === "function" ? await findOneQuery.lean() : await findOneQuery;
+  const doc =
+    typeof findOneQuery.lean === "function"
+      ? await findOneQuery.lean()
+      : await findOneQuery;
 
   return doc ? formatTelemetryDoc(doc) : null;
 };
@@ -236,40 +270,42 @@ const getHistoricalTelemetry = async (sensorId, options = {}) => {
     throw new Error("Sensor ID is required");
   }
 
+  const { deviceId, startDate, endDate, sort } = options;
   const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 100));
-  const sortOrder = String(options.sort || "asc").toLowerCase() === "desc" ? -1 : 1;
+  const sortOrder = String(sort || "asc").toLowerCase() === "desc" ? -1 : 1;
 
   const query = {
     "metadata.sensorId": String(sensorId).trim(),
   };
 
-  if (options.deviceId) {
-    query["metadata.deviceId"] = String(options.deviceId).trim();
+  if (deviceId) {
+    query["metadata.deviceId"] = String(deviceId).trim();
   }
 
-  if (options.startDate || options.endDate) {
+  if (startDate || endDate) {
     query.timestamp = {};
-    if (options.startDate) {
-      const s = new Date(options.startDate);
+    if (startDate) {
+      const s = new Date(startDate);
       if (!isNaN(s.getTime())) query.timestamp.$gte = s;
     }
-    if (options.endDate) {
-      const e = new Date(options.endDate);
+    if (endDate) {
+      const e = new Date(endDate);
       if (!isNaN(e.getTime())) query.timestamp.$lte = e;
     }
   }
 
   const findQuery = Telemetry.find(query).sort({ timestamp: sortOrder }).limit(limit);
-  const rawDocs = typeof findQuery.lean === "function" ? await findQuery.lean() : await findQuery;
+  const rawDocs =
+    typeof findQuery.lean === "function" ? await findQuery.lean() : await findQuery;
 
   const formattedData = rawDocs.map(formatTelemetryDoc);
 
   return {
     sensorId,
     query: {
-      deviceId: options.deviceId || null,
-      startDate: options.startDate || null,
-      endDate: options.endDate || null,
+      deviceId: deviceId || null,
+      startDate: startDate || null,
+      endDate: endDate || null,
       limit,
       sort: sortOrder === 1 ? "asc" : "desc",
       count: formattedData.length,

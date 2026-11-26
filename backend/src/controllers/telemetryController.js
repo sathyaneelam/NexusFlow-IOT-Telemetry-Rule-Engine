@@ -19,7 +19,7 @@ const ingestReading = async (req, res, next) => {
 };
 
 /**
- * Controller to handle bulk telemetry ingestion.
+ * Controller to handle bulk telemetry ingestion with throughput performance tracking.
  * POST /api/telemetry/bulk
  */
 const ingestBulk = async (req, res, next) => {
@@ -31,6 +31,7 @@ const ingestBulk = async (req, res, next) => {
       success: true,
       message: "Bulk telemetry ingested successfully",
       count: result.count,
+      summary: result.summary,
       data: result.data,
     });
   } catch (error) {
