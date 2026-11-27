@@ -1,5 +1,6 @@
 const Telemetry = require("../models/Telemetry");
 const { chunkArray, startTimer } = require("../utils/batchProcessor");
+const telemetryStream = require("./telemetryStream");
 
 /**
  * Lightweight document formatter for .lean() query results.
@@ -43,7 +44,9 @@ const createTelemetry = async (payload) => {
   const formatted = Telemetry.formatIncomingPayload(payload);
   const doc = new Telemetry(formatted);
   await doc.save();
-  return doc.toJSON();
+  const result = doc.toJSON();
+  telemetryStream.publishTelemetry(result);
+  return result;
 };
 
 /**
@@ -83,6 +86,11 @@ const createBulkTelemetry = async (readings, options = {}) => {
   }
 
   const durationMs = parseFloat(getDuration().toFixed(2));
+  const serializedDocs = insertedDocs.map((doc) =>
+    typeof doc.toJSON === "function" ? doc.toJSON() : formatTelemetryDoc(doc)
+  );
+
+  telemetryStream.publishBulkTelemetry(serializedDocs);
 
   return {
     count: insertedDocs.length,
@@ -94,9 +102,7 @@ const createBulkTelemetry = async (readings, options = {}) => {
       throughputPerSec:
         durationMs > 0 ? Math.round((insertedDocs.length / durationMs) * 1000) : 0,
     },
-    data: insertedDocs.map((doc) =>
-      typeof doc.toJSON === "function" ? doc.toJSON() : formatTelemetryDoc(doc)
-    ),
+    data: serializedDocs,
   };
 };
 
