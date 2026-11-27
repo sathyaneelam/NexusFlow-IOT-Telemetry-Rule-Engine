@@ -45,7 +45,9 @@ function ConditionNode({ data }) {
       </div>
 
       <p>{data.label}</p>
-      <small>{data.rule}</small>
+      <small>
+        {data.operator || ">"} {data.threshold ?? 30}°C
+      </small>
 
       <Handle type="source" position={Position.Right} />
     </div>
@@ -72,8 +74,9 @@ const initialNodes = [
     type: "condition",
     position: { x: 420, y: 150 },
     data: {
-      label: "Temperature > 30°C",
-      rule: "Greater than 30",
+      label: "Temperature",
+      operator: ">",
+      threshold: 30,
     },
   },
 ];
@@ -155,7 +158,8 @@ useEffect(() => {
             }
           : {
               label: "New Condition",
-              rule: "Configure condition",
+              operator: ">",
+              threshold: 30,
             },
     };
 
@@ -294,11 +298,26 @@ useEffect(() => {
 
               {selectedNode.type === "condition" && (
                 <>
-                  <label>Condition Rule</label>
-                  <input
-                    value={selectedNode.data.rule || ""}
+                  <label>Operator</label>
+                  <select
+                    value={selectedNode.data.operator || ">"}
                     onChange={(event) =>
-                      updateNodeField("rule", event.target.value)
+                      updateNodeField("operator", event.target.value)
+                    }
+                  >
+                    <option value=">">Greater than (&gt;)</option>
+                    <option value="<">Less than (&lt;)</option>
+                    <option value=">=">Greater or equal (&gt;=)</option>
+                    <option value="<=">Less or equal (&lt;=)</option>
+                    <option value="==">Equal to (==)</option>
+                  </select>
+
+                  <label>Threshold (°C)</label>
+                  <input
+                    type="number"
+                    value={selectedNode.data.threshold ?? 30}
+                    onChange={(event) =>
+                      updateNodeField("threshold", Number(event.target.value))
                     }
                   />
                 </>

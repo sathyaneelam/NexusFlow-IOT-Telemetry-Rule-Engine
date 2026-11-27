@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 
 import {
   Plus,
@@ -40,6 +41,8 @@ const workflows = [
 ];
 
 function Workflows() {
+  const navigate = useNavigate();
+
   return (
     <div className="page-content">
       <section className="page-heading">
@@ -49,7 +52,7 @@ function Workflows() {
           <p>Create, manage and monitor your industrial automation rules.</p>
         </div>
 
-        <button className="primary-button">
+        <button className="primary-button" onClick={() => navigate("/workflows/builder")}>
           <Plus size={16} />
           Create workflow
         </button>

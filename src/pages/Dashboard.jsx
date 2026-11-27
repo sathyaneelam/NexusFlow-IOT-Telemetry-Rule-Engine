@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 
 import {
   Activity,
@@ -72,6 +73,8 @@ function WorkflowItem({ name, detail }) {
 }
 
 function Dashboard() {
+  const navigate = useNavigate();
+
   return (
     <div className="page-content">
       <section className="page-heading">
@@ -80,7 +83,7 @@ function Dashboard() {
           <h1>Overview</h1>
           <p>Monitor your industrial operations and system performance.</p>
         </div>
-        <button className="primary-button">
+        <button className="primary-button" onClick={() => navigate("/workflows/builder")}>
           <Workflow size={16} />
           Create workflow
         </button>
