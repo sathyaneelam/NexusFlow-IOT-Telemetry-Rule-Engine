@@ -14,6 +14,7 @@ import {
 
 import "@xyflow/react/dist/style.css";
 import "../WorkflowBuilder.css";
+import { saveWorkflow } from "../utils/workflows";
 
 function SensorNode({ data }) {
   return (
@@ -107,6 +108,8 @@ useEffect(() => {
 }, [edges]);
   const [workflowName, setWorkflowName] = useState("New Automation");
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [workflowId, setWorkflowId] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("Draft");
 
 
 
@@ -126,6 +129,25 @@ useEffect(() => {
           : node
       )
     );
+  };
+
+  const handleSave = () => {
+    if (!workflowName.trim()) {
+      alert("Please enter a workflow name.");
+      return;
+    }
+
+    const saved = saveWorkflow({
+      id: workflowId || undefined,
+      name: workflowName.trim(),
+      description: `${nodes.length} nodes · ${edges.length} connections`,
+      nodes,
+      edges,
+      status: "Draft",
+    });
+
+    setWorkflowId(saved.id);
+    setSaveStatus("Saved");
   };
 
   const onConnect = useCallback(
@@ -187,8 +209,8 @@ useEffect(() => {
         </div>
 
         <div className="builder-actions">
-          <span className="draft-status">● Draft</span>
-          <button className="builder-save-button" disabled>
+          <span className="draft-status">● {saveStatus}</span>
+          <button className="builder-save-button" onClick={handleSave}>
             Save workflow
           </button>
         </div>
